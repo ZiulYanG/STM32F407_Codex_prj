@@ -1,0 +1,46 @@
+# CMake and Ninja build outputs
+**/build/
+**/cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+build.ninja
+.ninja_deps
+.ninja_log
+compile_commands.json
+
+# Embedded build artifacts
+*.elf
+*.axf
+*.bin
+*.hex
+*.map
+*.o
+*.obj
+*.d
+*.su
+*.lst
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# IDE and editor-local files
+.idea/
+.vscode/
+.settings/
+*.user
+*.launch
+*.code-workspace
+*~
+
+# Operating-system files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs, temporary files, and local scratch data
+*.log
+*.tmp
+*.bak
+/tmp/
