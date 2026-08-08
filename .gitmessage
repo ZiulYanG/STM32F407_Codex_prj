@@ -1,0 +1,16 @@
+<type>: <summary>
+
+Version: vX.Y.Z
+Date: YYYY-MM-DD
+
+Implemented:
+- <feature or fix>
+
+Changed files:
+- <path>: <reason>
+
+Verification:
+- <command or hardware observation>
+
+Pitfalls:
+- <symptom, root cause, and resolution; write "None" when applicable>

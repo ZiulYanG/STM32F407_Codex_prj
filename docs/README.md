@@ -11,6 +11,7 @@
 | [存储与升级设计](update/01-memory-and-update-design.md) | 内外部 Flash 分区、镜像格式、升级状态机和掉电恢复 |
 | [实施路线图](roadmap/01-implementation-roadmap.md) | 小步迭代阶段、交付物和验收条件 |
 | [OpenOCD PC/LR 故障定位](debug/01-openocd-pc-lr-fault-localization.md) | 读取 PC、断点捕获 Error_Handler、使用 LR 追溯故障调用者 |
+| [版本与提交规范](development/01-versioning-and-commit-process.md) | 版本号、提交说明、修改日志、验证和踩坑记录规则 |
 
 ## 已确认的工程决策
 
