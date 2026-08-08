@@ -1,0 +1,6 @@
+#ifndef BOOT_VERSION_H
+#define BOOT_VERSION_H
+
+#define BOOTLOADER_VERSION "0.2.0"
+
+#endif /* BOOT_VERSION_H */

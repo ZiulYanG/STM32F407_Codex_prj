@@ -26,6 +26,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "boot_app.h"
+#include "boot_log.h"
 #include "led_task.h"
 /* USER CODE END Includes */
 
@@ -97,6 +98,10 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+  if (!boot_log_init())
+  {
+    Error_Handler();
+  }
   boot_app_init();
   LED_TaskInit();
   /* USER CODE END RTOS_THREADS */
@@ -117,6 +122,8 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
+  (void)argument;
+
   /* Infinite loop */
   for(;;)
   {
@@ -129,4 +136,3 @@ void StartDefaultTask(void *argument)
 /* USER CODE BEGIN Application */
 
 /* USER CODE END Application */
-

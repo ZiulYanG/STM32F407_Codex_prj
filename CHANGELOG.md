@@ -2,6 +2,78 @@
 
 本文件记录每次提交对应的版本、日期、功能、改动文件、验证结果和踩坑。最新记录位于最上方。
 
+## [v0.2.0] - 2026-08-08
+
+### 版本目标
+
+完成 Bootloader 第一阶段基础平台，使时钟、RTOS/HAL 时基、板级调试串口和异步日志具备可观测、可重复验证的运行基线。
+
+### 实现功能
+
+- 使用 8 MHz HSE 和 PLL 将 SYSCLK/HCLK 配置为 168 MHz；
+- APB1 配置为 42 MHz，APB2 配置为 84 MHz，Flash 等待周期配置为 5 WS；
+- TIM7 以 1 kHz 中断维护 HAL tick，优先级为 0；
+- SysTick 仅维护 FreeRTOS 1 kHz tick，优先级为 15；
+- USART1 固定使用 PA9/TX、PA10/RX、115200 8N1；
+- 新增静态日志任务和静态消息队列，只有日志任务能够访问 USART1 BSP；
+- 启动时输出 Bootloader 版本、构建时间、复位原因、运行时钟、时基、串口参数和 APP 地址；
+- 保留 PF9/PF10 低电平点亮、每 500 ms 交替的 FreeRTOS LED 验证任务；
+- 将版本号集中到 `boot_version.h`，当前版本为 `0.2.0`；
+- 新增阶段 1 软硬件验收和复现文档。
+
+### 主要改动文件
+
+- `Firmware/Bootloader/CMakeLists.txt`
+- `Firmware/Bootloader/Core/Inc/stm32f4xx_hal_conf.h`
+- `Firmware/Bootloader/Core/Src/main.c`
+- `Firmware/Bootloader/Core/Src/freertos.c`
+- `Firmware/Bootloader/Core/Src/stm32f4xx_it.c`
+- `Firmware/Bootloader/Core/Src/stm32f4xx_hal_timebase_tim.c`
+- `Firmware/Bootloader/Core/Src/usart.c`
+- `Firmware/Bootloader/app/boot_app.c`
+- `Firmware/Bootloader/app/boot_version.h`
+- `Firmware/Bootloader/bsp/bsp_board.c`
+- `Firmware/Bootloader/bsp/bsp_uart1.c`
+- `Firmware/Bootloader/components/logging/boot_log.c`
+- `docs/verification/01-bootloader-stage-1-platform-bring-up.md`
+- `README.md`
+- `CHANGELOG.md`
+
+### 验证结果
+
+- `python script/build.py --clean` 编译成功并生成 ELF/BIN/HEX；
+- Debug ELF 使用 Flash 26,468 B、RAM 29,904 B，未超过 Bootloader 分区；
+- DAPLink CMSIS-DAP 烧录完成，OpenOCD 显示 `Verified OK` 并复位运行；
+- SWD 回读 `RCC_CFGR=0x0000940A`，确认 PLL、AHB/1、APB1/4、APB2/2；
+- `SystemCoreClock=168000000`，Flash ACR latency 为 5；
+- TIM7 的 PSC=83、ARR=999、CR1.CEN=1、DIER.UIE=1；
+- SysTick LOAD=167999，TIM7 优先级为 0，SysTick 优先级为 15；
+- USART1 BRR=`0x02D9`，GPIOA PA9/PA10 均为 AF7；
+- HAL tick 与 FreeRTOS tick 均持续递增，日志队列和日志任务句柄有效，丢弃计数为 0；
+- GPIOF ODR 观察到 `0x0400` 与 `0x0200` 状态，LED 任务持续运行；
+- COM3 在 115200 8N1 下捕获完整启动报文，运行时打印的时钟为 168/168/42/84 MHz，并正确识别 Pin reset 与 Software reset。
+
+### 踩坑与解决办法
+
+1. **`.ioc` 与生成源码不一致**
+   - 现象：`.ioc` 已配置 168 MHz、TIM7 和 PA10，但源码仍为 84 MHz、SysTick HAL tick 和 PB7 RX；
+   - 根因：旧生成代码未与最新 `.ioc` 同步，CubeMX 无界面生成在当前环境中超时；
+   - 处理：逐项审计并同步时钟、时基和引脚源码，通过运行时寄存器回读验证，避免只相信 `.ioc`。
+
+2. **TIM7 API 链接失败**
+   - 现象：`HAL_TIM_Base_Init`、`HAL_TIM_Base_Start_IT` 和 `HAL_TIM_IRQHandler` 未定义；
+   - 根因：`stm32f4xx_hal_conf.h` 未启用 `HAL_TIM_MODULE_ENABLED`，定时器驱动 API 被条件编译掉；
+   - 处理：启用 TIM HAL 模块并重新 Clean Build。
+
+3. **误用 DAPLink 虚拟串口**
+   - 现象：COM11 可以打开但收不到 PA9 启动报文；
+   - 根因：COM11 属于 DAPLink 虚拟串口，板级 PA9/PA10 实际通过独立 USB 转串口枚举为 COM3；
+   - 处理：固件日志验收固定使用当前机器的 COM3；换环境时按实际 USB 转串口设备重新确认端口号。
+
+4. **CubeMX 重新生成存在覆盖风险**
+   - 现象：直接重新生成可能恢复可选 SDIO 的启动初始化、时基或用户 CMake 配置；
+   - 处理：日常构建不需要重新生成；修改 `.ioc` 后必须审查 Git diff 并重新执行完整硬件验收。
+
 ## [v0.1.0] - 2026-08-08
 
 ### 版本目标

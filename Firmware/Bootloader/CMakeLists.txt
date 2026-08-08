@@ -27,11 +27,8 @@ include("cmake/gcc-arm-none-eabi.cmake")
 # Enable compile command to ease indexing with e.g. clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 
-# Enable CMake support for ASM and C languages
-enable_language(C ASM)
-
 # Core project settings
-project(${CMAKE_PROJECT_NAME})
+project(${CMAKE_PROJECT_NAME} C ASM)
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
 # Create an executable object type
@@ -49,7 +46,10 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     app/boot_app.c
     bsp/bsp_board.c
+    bsp/bsp_uart1.c
     app/led_task.c
+    components/logging/boot_log.c
+    Core/Src/stm32f4xx_hal_timebase_tim.c
 )
 
 # Add include paths
@@ -57,6 +57,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     app
     bsp
     components
+    components/logging
 )
 
 # Add project symbols (macros)
