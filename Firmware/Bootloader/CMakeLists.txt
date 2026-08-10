@@ -48,6 +48,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     bsp/bsp_board.c
     bsp/bsp_uart1.c
     app/led_task.c
+    components/boot/app_launcher.c
     components/logging/boot_log.c
     Core/Src/stm32f4xx_hal_timebase_tim.c
 )
@@ -57,6 +58,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     app
     bsp
     components
+    components/boot
     components/logging
 )
 

@@ -10,6 +10,9 @@ bool boot_log_init(void);
 /** Format and enqueue a log message without blocking the calling task. */
 bool boot_log_printf(const char *format, ...);
 
+/** Block the calling task until every previously queued log has been sent. */
+bool boot_log_flush(uint32_t timeout_ms);
+
 /** Return how many messages could not be queued or transmitted. */
 uint32_t boot_log_get_dropped_count(void);
 

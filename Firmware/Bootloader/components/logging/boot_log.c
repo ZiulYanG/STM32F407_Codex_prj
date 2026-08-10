@@ -16,6 +16,7 @@
 
 typedef struct
 {
+    TaskHandle_t completion_task;
     uint16_t length;
     char text[BOOT_LOG_MESSAGE_SIZE];
 } boot_log_message_t;
@@ -47,11 +48,17 @@ static void boot_log_task(void *argument)
     {
         if (xQueueReceive(log_queue, &message, portMAX_DELAY) == pdPASS)
         {
-            if (bsp_uart1_write((const uint8_t *)message.text,
-                                message.length,
-                                BOOT_LOG_UART_TIMEOUT_MS) != 0)
+            if ((message.length > 0U) &&
+                (bsp_uart1_write((const uint8_t *)message.text,
+                                 message.length,
+                                 BOOT_LOG_UART_TIMEOUT_MS) != 0))
             {
                 boot_log_record_drop();
+            }
+
+            if (message.completion_task != NULL)
+            {
+                xTaskNotifyGive(message.completion_task);
             }
         }
     }
@@ -118,6 +125,29 @@ bool boot_log_printf(const char *format, ...)
     }
 
     return true;
+}
+
+bool boot_log_flush(uint32_t timeout_ms)
+{
+    boot_log_message_t barrier = {0};
+    TickType_t timeout_ticks;
+
+    if ((log_queue == NULL) ||
+        (xTaskGetSchedulerState() != taskSCHEDULER_RUNNING) ||
+        (xTaskGetCurrentTaskHandle() == log_task))
+    {
+        return false;
+    }
+
+    timeout_ticks = pdMS_TO_TICKS(timeout_ms);
+    barrier.completion_task = xTaskGetCurrentTaskHandle();
+
+    if (xQueueSend(log_queue, &barrier, timeout_ticks) != pdPASS)
+    {
+        return false;
+    }
+
+    return ulTaskNotifyTake(pdTRUE, timeout_ticks) == 1U;
 }
 
 uint32_t boot_log_get_dropped_count(void)

@@ -2,6 +2,76 @@
 
 本文件记录每次提交对应的版本、日期、功能、改动文件、验证结果和踩坑。最新记录位于最上方。
 
+## [v0.3.0] - 2026-08-10
+
+### 版本目标
+
+建立 Bootloader 到独立 Application 的最小可信启动闭环，验证有效 APP 跳转、无效 APP 拒跳和恢复后再次跳转。
+
+### 实现功能
+
+- 新增 `Firmware/Application` 独立 CubeMX/CMake/FreeRTOS 工程；
+- APP 内部 Flash 链接区固定为 `0x08040000` 起始、768 KB 长度；
+- APP 编译时定义 `USER_VECT_TAB_ADDRESS` 和 `VECT_TAB_OFFSET=0x00040000U`；
+- APP 使用 168 MHz、TIM7 HAL tick、FreeRTOS SysTick、USART1 PA9/PA10 和 PF9/PF10；
+- APP 启动输出版本、各级时钟、VTOR、时基、串口和运行状态；
+- Bootloader 校验 APP 向量表对齐、初始 MSP 范围/对齐和 Thumb Reset_Handler 地址；
+- 跳转前刷新串口日志、关闭 SysTick、复位 TIM7/USART1、清理 NVIC pending/enable 状态；
+- 切换 VTOR、CONTROL 和 MSP 后保持 PRIMASK，交由 APP FreeRTOS 启动代码安全开中断；
+- 无效 APP 时输出具体原因并留在 Bootloader；
+- Bootloader 默认控制任务栈由 512 B 提升到 2 KB，并同步 `.ioc`；
+- Bootloader 与 Application 正式版本统一为 `0.3.0`。
+
+### 主要改动文件
+
+- `Firmware/Application/`
+- `Firmware/Bootloader/Bootloader.ioc`
+- `Firmware/Bootloader/CMakeLists.txt`
+- `Firmware/Bootloader/Core/Src/freertos.c`
+- `Firmware/Bootloader/app/boot_app.c`
+- `Firmware/Bootloader/app/boot_version.h`
+- `Firmware/Bootloader/components/boot/app_launcher.c`
+- `Firmware/Bootloader/components/boot/app_launcher.h`
+- `Firmware/Bootloader/components/logging/boot_log.c`
+- `Firmware/Bootloader/components/logging/boot_log.h`
+- `docs/verification/02-bootloader-application-jump.md`
+- `docs/README.md`
+- `README.md`
+- `CHANGELOG.md`
+
+### 验证结果
+
+- Bootloader Clean Build 成功，Debug ELF 使用 Flash 28,296 B、静态 RAM 30,056 B；
+- Application Clean Build 成功，Debug ELF 使用 Flash 25,632 B、静态 RAM 29,816 B；
+- ELF 检查确认 APP `.isr_vector=0x08040000`、MSP=`0x20020000`、Reset_Handler=`0x080456E5`；
+- DAPLink CMSIS-DAP 以 100 kHz 完成两套 ELF 的烧录、校验和复位；
+- COM3 捕获 Bootloader `APP check : VALID` 和 `JUMP TO APPLICATION`；
+- COM3 随后捕获 Application `Vector table : 0x08040000` 和 168/168/42/84 MHz；
+- SWD 运行态读取 PC=`0x08044208`、VTOR=`0x08040000`、CFSR/HFSR=`0`；
+- 临时擦除 Sector 6 后向量为 `0xFFFFFFFF/0xFFFFFFFF`，Bootloader 输出 `INVALID (initial MSP)` 并留在 Bootloader；
+- 重新烧录 Application 后再次完成有效校验和跳转，硬件恢复正常运行。
+
+### 踩坑与解决办法
+
+1. **默认任务栈溢出破坏 FreeRTOS Timer 栈**
+   - 现象：Bootloader 无新日志，CPU 进入 HardFault，CFSR=`0x00020000`（INVSTATE）；
+   - 定位：在 HardFault 入口断点读取异常栈，发现 PendSV 恢复的 LR 从 `0xFFFFFFFD` 变为 RAM 地址；再在 SVC 入口观察 Timer 栈原本有效，确认是在 `boot_app_process()` 运行后被覆盖；
+   - 根因：`defaultTask` 只有 512 B，却在任务上下文调用多次 `vsnprintf`，栈向下溢出到相邻的静态 Timer 栈；
+   - 处理：将默认控制任务栈提升为 2 KB，并同步 `Bootloader.ioc`，Clean Build 后故障消失。
+
+2. **跳转交接窗口过早打开中断**
+   - 现象：最初跳转汇编在切换 VTOR/MSP 后立即执行 `cpsie i`，存在新旧 RTOS 上下文交界处响应异常的风险；
+   - 处理：跳转时保持 PRIMASK，APP 的 FreeRTOS `prvPortStartFirstTask()` 在建立自身 MSP 后负责开中断。
+
+3. **烧录时捕获到旧版本日志**
+   - 现象：烧录新版 ELF 时先看到旧版 `0.2.0`；
+   - 根因：OpenOCD 编程前连接/复位阶段让旧固件短暂运行；
+   - 处理：同时检查 ELF 内嵌字符串、烧录校验结果，并在烧录完成后单独复位抓取日志。
+
+4. **CH340 间歇掉线与 Code 10**
+   - 现象：COM3 消失或显示 `CM_PROB_FAILED_START`，Python 报 `Could not find file 'COM3'`；
+   - 处理：用串口 API、注册表和 `pnputil` 区分 COM3 CH340 与 COM11 DAPLink，重新连接 CH340 后确认状态为 `Started` 再测试。
+
 ## [v0.2.0] - 2026-08-08
 
 ### 版本目标

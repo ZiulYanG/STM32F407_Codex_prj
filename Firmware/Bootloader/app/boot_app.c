@@ -1,5 +1,6 @@
 #include "boot_app.h"
 
+#include "app_launcher.h"
 #include "bsp_board.h"
 #include "boot_log.h"
 #include "boot_version.h"
@@ -7,6 +8,8 @@
 #include "stm32f4xx_hal.h"
 
 #define APP_FLASH_BASE_ADDRESS 0x08040000UL
+#define APP_FLASH_END_ADDRESS  0x08100000UL
+#define BOOT_LOG_FLUSH_TIMEOUT_MS 1000U
 
 void boot_app_init(void)
 {
@@ -37,8 +40,39 @@ void boot_app_init(void)
 
 void boot_app_process(void)
 {
-    /*
-     * Future work: evaluate boot metadata, verify the candidate image and
-     * either install it or transfer control to the application firmware.
-     */
+    static bool decision_complete;
+    app_launch_target_t target;
+    app_launch_status_t status;
+
+    if (decision_complete)
+    {
+        return;
+    }
+    decision_complete = true;
+
+    status = app_launcher_inspect(APP_FLASH_BASE_ADDRESS,
+                                  APP_FLASH_END_ADDRESS,
+                                  &target);
+    if (status != APP_LAUNCH_VALID)
+    {
+        (void)boot_log_printf("APP check     : INVALID (%s)\r\n",
+                              app_launcher_status_string(status));
+        (void)boot_log_printf("Boot action   : STAY IN BOOTLOADER\r\n");
+        (void)boot_log_flush(BOOT_LOG_FLUSH_TIMEOUT_MS);
+        return;
+    }
+
+    (void)boot_log_printf("APP check     : VALID\r\n");
+    (void)boot_log_printf("APP MSP       : 0x%08lX\r\n",
+                          (unsigned long)target.initial_msp);
+    (void)boot_log_printf("APP reset     : 0x%08lX\r\n",
+                          (unsigned long)target.reset_handler);
+    (void)boot_log_printf("Boot action   : JUMP TO APPLICATION\r\n");
+
+    if (!boot_log_flush(BOOT_LOG_FLUSH_TIMEOUT_MS))
+    {
+        Error_Handler();
+    }
+
+    app_launcher_jump(&target);
 }

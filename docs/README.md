@@ -13,6 +13,7 @@
 | [OpenOCD PC/LR 故障定位](debug/01-openocd-pc-lr-fault-localization.md) | 读取 PC、断点捕获 Error_Handler、使用 LR 追溯故障调用者 |
 | [版本与提交规范](development/01-versioning-and-commit-process.md) | 版本号、提交说明、修改日志、验证和踩坑记录规则 |
 | [Bootloader 阶段 1 验证](verification/01-bootloader-stage-1-platform-bring-up.md) | 168 MHz、双时基、USART1 日志、SWD 回读和 COM3 端到端验收 |
+| [Bootloader 阶段 2 验证](verification/02-bootloader-application-jump.md) | APP 分区、向量校验、安全跳转、无效镜像驻留和栈溢出定位 |
 
 ## 已确认的工程决策
 
