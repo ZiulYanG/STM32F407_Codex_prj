@@ -9,6 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from image_layout import validate_application_image
+from self_test_policy import validate_self_test_policy
+from rtos_policy import validate_rtos_policy
+
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 PRESETS = ("Debug", "RelWithDebInfo", "Release", "MinSizeRel")
@@ -36,8 +40,15 @@ def main() -> int:
     try:
         if not (PROJECT_DIR / "CMakePresets.json").is_file():
             raise RuntimeError(f"CMake project not found: {PROJECT_DIR}")
-        for name in ("cmake", "arm-none-eabi-objcopy", "arm-none-eabi-size"):
+        for name in (
+            "cmake",
+            "arm-none-eabi-objcopy",
+            "arm-none-eabi-objdump",
+            "arm-none-eabi-size",
+        ):
             require_command(name)
+
+        validate_rtos_policy()
 
         run(["cmake", "--preset", args.preset])
         build_command = ["cmake", "--build", "--preset", args.preset, "--parallel"]
@@ -52,6 +63,8 @@ def main() -> int:
         if not elf.is_file():
             raise RuntimeError(f"Expected ELF was not generated: {elf}")
 
+        validate_application_image(elf)
+        validate_self_test_policy(elf, args.preset)
         run(["arm-none-eabi-objcopy", "-O", "binary", str(elf), str(binary)])
         run(["arm-none-eabi-objcopy", "-O", "ihex", str(elf), str(hex_file)])
         run(["arm-none-eabi-size", str(elf)])

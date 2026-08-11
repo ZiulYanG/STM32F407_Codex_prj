@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from image_layout import validate_application_image
+
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_IMAGE = PROJECT_DIR / "build" / "Debug" / "Application.elf"
@@ -34,6 +36,7 @@ def main() -> int:
     try:
         if not image.is_file():
             raise RuntimeError(f"Firmware image not found: {image}")
+        validate_application_image(image)
         if not openocd.is_file():
             raise RuntimeError(f"OpenOCD executable not found: {openocd}")
         if not scripts_dir.is_dir():

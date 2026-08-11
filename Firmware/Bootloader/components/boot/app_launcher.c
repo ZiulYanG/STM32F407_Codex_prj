@@ -101,7 +101,7 @@ __attribute__((naked, noreturn)) static void app_launcher_branch(
 
 void app_launcher_jump(const app_launch_target_t *target)
 {
-    app_launch_target_t validated_target;
+    app_launch_target_t validated_target = {0};
     uint32_t index;
     uint32_t initial_msp;
     uint32_t reset_handler;

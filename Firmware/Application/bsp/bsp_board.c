@@ -4,6 +4,17 @@ void bsp_board_init(void)
 {
     BSP_LED1_OFF();
     BSP_LED2_OFF();
+    bsp_board_flash_deselect();
+}
+
+void bsp_board_flash_select(void)
+{
+    HAL_GPIO_WritePin(F_CS_GPIO_Port, F_CS_Pin, GPIO_PIN_RESET);
+}
+
+void bsp_board_flash_deselect(void)
+{
+    HAL_GPIO_WritePin(F_CS_GPIO_Port, F_CS_Pin, GPIO_PIN_SET);
 }
 
 const char *bsp_board_get_reset_reason(void)

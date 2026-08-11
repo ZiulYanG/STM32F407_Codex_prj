@@ -12,6 +12,7 @@
 #define APP_LOG_QUEUE_DEPTH        24U
 #define APP_LOG_TASK_STACK_WORDS   512U
 #define APP_LOG_UART_TIMEOUT_MS    1000U
+#define APP_LOG_QUEUE_WAIT_MS      100U
 
 typedef struct
 {
@@ -85,6 +86,7 @@ bool app_log_init(void)
 bool app_log_printf(const char *format, ...)
 {
     app_log_message_t message = {0};
+    TickType_t queue_wait = 0U;
     va_list arguments;
     int formatted_length;
 
@@ -110,7 +112,12 @@ bool app_log_printf(const char *format, ...)
                          ? (uint16_t)(sizeof(message.text) - 1U)
                          : (uint16_t)formatted_length;
 
-    if (xQueueSend(log_queue, &message, 0U) != pdPASS)
+    if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING)
+    {
+        queue_wait = pdMS_TO_TICKS(APP_LOG_QUEUE_WAIT_MS);
+    }
+
+    if (xQueueSend(log_queue, &message, queue_wait) != pdPASS)
     {
         app_log_record_drop();
         return false;
@@ -128,4 +135,14 @@ uint32_t app_log_get_dropped_count(void)
     taskEXIT_CRITICAL();
 
     return count;
+}
+
+uint32_t app_log_get_stack_high_water_mark_words(void)
+{
+    if (log_task == NULL)
+    {
+        return 0U;
+    }
+
+    return (uint32_t)uxTaskGetStackHighWaterMark(log_task);
 }

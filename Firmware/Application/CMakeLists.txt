@@ -34,6 +34,16 @@ message("Build type: " ${CMAKE_BUILD_TYPE})
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+# Relink when the protected APP memory layout changes. The actual -T option is
+# set by the toolchain file so it is also present during CMake compiler checks.
+set(APPLICATION_LINKER_SCRIPT
+    "${CMAKE_CURRENT_SOURCE_DIR}/linker/STM32F407ZGTx_APP_FLASH.ld"
+)
+set_property(
+    TARGET ${CMAKE_PROJECT_NAME}
+    APPEND PROPERTY LINK_DEPENDS "${APPLICATION_LINKER_SCRIPT}"
+)
+
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
@@ -46,21 +56,35 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     app/app_main.c
     bsp/bsp_board.c
+    bsp/bsp_i2c1.c
+    bsp/bsp_spi1.c
     bsp/bsp_uart1.c
+    components/drivers/eeprom_24c02.c
+    components/drivers/spi_nor.c
     components/logging/app_log.c
+    components/storage/storage.c
+    components/storage/storage_eeprom_24c02.c
+    components/storage/storage_partition.c
+    components/storage/storage_spi_nor.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     app
     bsp
+    components/drivers
     components/logging
+    components/storage
 )
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     USER_VECT_TAB_ADDRESS
     VECT_TAB_OFFSET=0x00040000U
+    $<$<CONFIG:Debug>:APP_ENABLE_SPI_NOR_SELF_TEST=1>
+    $<$<NOT:$<CONFIG:Debug>>:APP_ENABLE_SPI_NOR_SELF_TEST=0>
+    $<$<CONFIG:Debug>:APP_ENABLE_EEPROM_SELF_TEST=1>
+    $<$<NOT:$<CONFIG:Debug>>:APP_ENABLE_EEPROM_SELF_TEST=0>
 )
 
 # Add linked libraries

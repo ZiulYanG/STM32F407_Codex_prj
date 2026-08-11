@@ -10,19 +10,19 @@
 - 集成升级、USB 测试、Modbus 和日志功能的 WinForms 工具；
 - TinyUSB 与 USBX 的两个独立学习对比工程。
 
-当前已完成 Bootloader 第二阶段最小启动闭环：Bootloader 和 Application 两套独立 FreeRTOS 工程均可构建、烧录和输出运行信息；Bootloader 能校验 APP 初始 MSP/Reset_Handler，安全切换 VTOR/MSP 并跳转。升级传输、镜像签名、外部 Flash 和 WinForms 工具仍按路线图逐步实现。
+当前已完成 P1 基础 BSP 与外部存储：Bootloader/Application 独立工程和安全跳转稳定；Application 已具备 SPI NOR、24C02、统一存储接口、Flash 分区隔离、静态 RTOS 对象和自动硬件验收脚本。下一阶段进入 P5 USART1 IAP；镜像签名、双副本 Metadata 和随机断电回滚随后在 P6 实现。
 
 ## 当前版本
 
 | 项目 | 内容 |
 |---|---|
-| 版本 | `v0.3.0` |
-| 日期 | `2026-08-10` |
-| 阶段 | Bootloader 阶段 2：独立 APP 与安全跳转 |
+| 版本 | `v0.4.0` |
+| 日期 | `2026-08-11` |
+| 阶段 | P1：基础 BSP、外部存储与分区隔离 |
 | 分支 | `main` |
 | 仓库 | [ZiulYanG/STM32F407_Codex_prj](https://github.com/ZiulYanG/STM32F407_Codex_prj) |
 
-本版本新增 `Firmware/Application` 独立工程，APP 固定链接到 `0x08040000`，向量表同步重定位。Bootloader 在启动后校验 APP 向量，刷新 USART1 队列后关闭中断和遗留外设、切换 VTOR/MSP 并跳转；无效向量则留在 Bootloader。完整验证记录见 [阶段 2 验证报告](docs/verification/02-bootloader-application-jump.md)，改动与踩坑见 [CHANGELOG.md](CHANGELOG.md)。
+本版本完成 SPI1/I2C1 BSP、NM25Q128EVB/W25Q128 与 24C02 驱动、Linux 风格统一存储接口、Candidate/Golden/Metadata/Driver Test 分区视图，以及 Debug/Release 自检门禁。Application 的任务和队列静态装配，运行时检查栈高水位和动态堆未使用状态；100 轮硬件在环存储循环全部通过。完整结论见 [P1 验收报告](docs/verification/10-p1-exit-storage-rtos-soak.md)。
 
 ## 编译与烧录 Bootloader
 
@@ -61,7 +61,7 @@ Application ELF/BIN/HEX 输出到 `Firmware/Application/build/Debug/`，链接�
 
 ```text
 STM32F407 Bootloader
-Version       : 0.3.0
+Version       : 0.4.0
 SYSCLK        : 168000000 Hz
 HCLK          : 168000000 Hz
 PCLK1         : 42000000 Hz
@@ -74,14 +74,17 @@ APP check     : VALID
 Boot action   : JUMP TO APPLICATION
 
 STM32F407 Application
-Version       : 0.3.0
+Version       : 0.4.0
 Vector table  : 0x08040000
+Storage partitions: READY
+RTOS health    : PASS
 ```
 
 ## 版本记录
 
 | 版本 | 日期 | 实现功能 | 主要改动文件 | 验证 | 踩坑 |
 |---|---|---|---|---|---|
+| `v0.4.0` | 2026-08-11 | SPI NOR/24C02、统一存储接口、Flash 分区隔离、静态 RTOS 对象、资源门禁与循环测试 | `Firmware/Application/bsp/`、`components/drivers/`、`components/storage/`、`app/`、`script/`、P1 文档 | 主机测试、Debug/Release Clean Build、DAPLink/COM3、累计100轮硬件在环存储循环通过 | 实测Flash为兼容料；CubeMX重置链接区/任务栈；末扇区边界测试同时触发越界与对齐；heap_4未初始化时余量显示0/0 |
 | `v0.3.0` | 2026-08-10 | 独立 APP、`0x08040000` 分区与 VTOR、APP 向量校验、安全跳转、无效 APP 驻留 | `Firmware/Application/`、`Firmware/Bootloader/components/boot/`、`boot_app.c`、`boot_log.*`、`freertos.c`、`.ioc`、阶段 2 文档 | 双工程 Clean Build、DAPLink 校验烧录、有效跳转、Sector 6 擦除拒跳、恢复 APP、SWD PC/VTOR/故障寄存器验证通过 | 512 B 默认任务栈被 `vsnprintf` 压穿并覆盖 Timer 栈；跳转交接窗口过早开中断；CH340 Code 10/掉线影响日志抓取 |
 | `v0.2.0` | 2026-08-08 | 168 MHz、TIM7 HAL 时基、FreeRTOS SysTick、静态 USART1 日志、启动信息 | `Firmware/Bootloader/Core/`、`app/`、`bsp/`、`components/logging/`、`docs/verification/` | Clean Build、DAPLink 烧录校验、SWD 寄存器回读、COM3 启动报文和 LED 验证通过 | `.ioc` 与生成源码漂移；TIM HAL 宏缺失导致链接失败；误将 COM11 当作板级日志串口 |
 | `v0.1.0` | 2026-08-08 | Bootloader 基线、RTOS LED、DAPLink 构建烧录、故障定位 | `Firmware/Bootloader/`、`docs/`、`README.md` | 编译、烧录、复位和 GPIO 寄存器验证通过 | SDIO 无卡阻塞启动；OpenOCD Tcl 路径转义；CubeMX 配置与生成源码漂移 |

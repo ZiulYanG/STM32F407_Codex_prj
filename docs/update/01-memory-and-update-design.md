@@ -17,7 +17,7 @@ STM32F407ZGT6 的 1 MB 内部 Flash 按硬件扇区边界分为：
 - 量产时对 Bootloader 扇区启用写保护。
 - Bootloader 代码尺寸、静态 RAM 和任务栈设置发布预算门槛。
 
-## 2. W25Q128 分区
+## 2. 128 Mbit SPI NOR分区
 
 初始逻辑布局如下，最终以分区表常量为准：
 
@@ -29,9 +29,14 @@ STM32F407ZGT6 的 1 MB 内部 Flash 按硬件扇区边界分为：
 | Metadata B | `0x210000` | 64 KB | 事务记录副本 B |
 | Event Log | `0x220000` | 512 KB | 升级和运行事件环形日志 |
 | Crash Dump | `0x2A0000` | 128 KB | HardFault 和看门狗现场 |
-| Reserved | `0x2C0000` | 余量 | 后续扩展 |
+| Reserved | `0x2C0000` | `0xD3F000` | 后续扩展，结束地址`0xFFEFFF` |
+| Driver Test | `0xFFF000` | 4 KB | 仅开发阶段驱动擦写验收，发布版禁用 |
 
 每个分区起始地址按 64 KB 擦除块对齐。驱动同时支持 4 KB Sector 擦除，但分区边界不能依赖未对齐的小扇区。
+
+`Driver Test`是唯一允许自动破坏性测试的区域。测试必须使用固定地址`0x00FFF000`，并在成功或失败路径可执行时恢复为擦除态；Candidate、Golden、Metadata、Event Log和Crash Dump严禁用于驱动测试。当前构建策略仅在Debug定义`APP_ENABLE_SPI_NOR_SELF_TEST=1`，Release及其他非Debug配置强制为0；构建脚本还会检查ELF符号和标记，防止发布镜像误带自动擦写入口。
+
+通用写接口必须先校验完整的`address + length`范围，再按每页剩余空间拆分为不超过256字节的Page Program。底层单页接口继续拒绝跨页请求，4 KB擦除接口继续拒绝非对齐地址。当前已实机验证跨页写入、恰好结束于容量末字节以及读写越界拒绝。
 
 ## 3. 镜像容器
 
@@ -133,4 +138,3 @@ USB、CAN 和网络适配器以后复用镜像和会话语义，不重复实现�
 - 开发模式允许未签名镜像时，必须使用不同构建配置并显示明显标志。
 - 量产启用 Bootloader WRP，并按维护流程评估 RDP。
 - W25Q128 和 24C02 不是安全存储，不能单独提供强物理防回放保证。
-

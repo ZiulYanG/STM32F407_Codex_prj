@@ -2,6 +2,60 @@
 
 本文件记录每次提交对应的版本、日期、功能、改动文件、验证结果和踩坑。最新记录位于最上方。
 
+## [v0.4.0] - 2026-08-11
+
+### 版本目标
+
+完成 P1 基础 BSP 与外部存储，形成可供 USART1 IAP 使用的稳定存储基线。
+
+### 实现功能
+
+- Application 配置 SPI1 PB3/PB4/PB5、PB14 软件片选和 I2C1 PB8/PB9；
+- 新增 BSP SPI/I2C 层、NM25Q128EVB/W25Q128 兼容 SPI NOR 驱动和 24C02 驱动；
+- 新增 `storage_device + storage_ops` 统一存储接口及两类 Adapter；
+- 新增 Candidate、Golden、Metadata A/B 和 Driver Test 有界分区视图；
+- APP 专用链接脚本和 Python 脚本共同阻止错误镜像覆盖 Bootloader；
+- Debug 执行可恢复的双存储自检，Release 从源码和 ELF 中移除破坏性入口；
+- defaultTask、日志任务和日志队列全部静态装配；
+- 增加任务栈高水位、动态堆未使用和日志丢弃健康门禁；
+- 新增主机存储测试、串口硬件验证和存储循环脚本。
+
+### 主要改动文件
+
+- `Firmware/Application/Application.ioc`
+- `Firmware/Application/Core/`
+- `Firmware/Application/app/`
+- `Firmware/Application/bsp/`
+- `Firmware/Application/components/drivers/`
+- `Firmware/Application/components/storage/`
+- `Firmware/Application/components/logging/`
+- `Firmware/Application/linker/`
+- `Firmware/Application/script/`
+- `Firmware/Application/tests/storage/`
+- `docs/hardware/03-w25q128-pin-and-ioc-audit.md`
+- `docs/architecture/02-linux-inspired-storage-driver-model.md`
+- `docs/verification/03-application-spi-nor-jedec.md` 至 `10-p1-exit-storage-rtos-soak.md`
+- `PROJECT_HANDOFF.md`
+
+### 验证结果
+
+- 主机 GCC 严格警告模式下统一存储与分区测试 PASS；
+- Debug APP 范围 `0x08040000-0x0804AF4F`，双存储全部正向/负向测试 PASS；
+- Release APP 范围 `0x08040000-0x08047727`，破坏性自检均 DISABLED；
+- Debug 栈余量：defaultTask 313 words、app_log 428 words；
+- Release 栈余量：defaultTask 324 words、app_log 437 words；
+- 两配置均显示应用 RTOS 对象 STATIC、heap UNUSED、health PASS、log drops 0；
+- 存储循环累计 100/100 轮 PASS，验证上轮清理状态跨复位保持；
+- 当前板卡 JEDEC ID `52 21 18`，按 NM25Q128EVB 兼容料识别。
+
+### 踩坑与解决办法
+
+1. CubeMX 再生成会恢复整片内部 Flash 链接脚本，现将 APP 专用脚本移出生成区并增加 ELF/HEX 地址门禁。
+2. CubeMX 曾把默认任务栈从 512 words 回退至 128 words，已同步修正 `.ioc` 与源码并加入运行时高水位检查。
+3. Flash 最末扇区“地址+1、擦4 KiB”同时越界和未对齐，统一层按顺序返回 RANGE；测试改成单一约束后语义明确。
+4. `heap_4` 从未分配时余量接口返回 `0/0`，并非耗尽；P1 将该状态定义为 `UNUSED`，任何首次动态分配都会变为 `TOUCHED` 并判 FAIL。
+5. 实物 JEDEC ID 与原理图 Winbond 标称不同；驱动型号表同时支持实测兼容料和 W25Q128。
+
 ## [v0.3.0] - 2026-08-10
 
 ### 版本目标
