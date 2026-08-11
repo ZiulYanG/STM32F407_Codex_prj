@@ -6,6 +6,8 @@
 |---|---|
 | [系统架构](architecture/01-system-architecture.md) | 工程边界、软件分层、任务模型和仓库结构 |
 | [Linux 风格统一存储模型](architecture/02-linux-inspired-storage-driver-model.md) | storage_device/ops、Adapter、能力语义和并发边界 |
+| [USART1 Serial Manager](architecture/03-serial-manager-and-protocol-seam.md) | 串口唯一所有权、静态队列、RX StreamBuffer 和协议模式 seam |
+| [YMODEM 与命令控制台](architecture/04-ymodem-and-console.md) | RX/TX 回调边界、1K/4K Flash 策略、双工程 Console 与日志规则 |
 | [IO 分配](hardware/01-io-allocation.md) | 板载固定资源、首版启用引脚、扩展预留和复用冲突 |
 | [IO 分配 CSV](hardware/io-allocation.csv) | 可排序、可供脚本检查的引脚分配源数据 |
 | [CubeMX 基线](hardware/02-cubemx-baseline.md) | 时钟、调试、RTOS 时基和首版外设参数 |
@@ -18,6 +20,9 @@
 | [统一存储接口验证](verification/08-unified-storage-interface.md) | 主机测试、Debug/Release 构建与双存储实机验收 |
 | [外部 Flash 分区验证](verification/09-storage-partitions.md) | 分区地址隔离、父设备生命周期、Debug/Release 实机验收 |
 | [P1 阶段验收](verification/10-p1-exit-storage-rtos-soak.md) | 静态 RTOS 资源、100 轮存储循环和 P1 退出结论 |
+| [P5-1 串口管理验证](verification/11-p5-serial-manager.md) | Debug/Release 构建、COM3 TX 与 SWD RX 统计闭环 |
+| [P5-2/P5-3 验证](verification/12-p5-ymodem-console.md) | YMODEM/Console 主机测试、双工程构建与 COM3 控制台实测 |
+| [P5-4 YMODEM会话验证](verification/13-p5-ymodem-session.md) | 命令触发、系统模式、Candidate硬件回环、取消恢复与栈水位 |
 
 ## 已确认的工程决策
 

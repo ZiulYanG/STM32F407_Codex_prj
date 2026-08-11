@@ -10,19 +10,19 @@
 - 集成升级、USB 测试、Modbus 和日志功能的 WinForms 工具；
 - TinyUSB 与 USBX 的两个独立学习对比工程。
 
-当前已完成 P1 基础 BSP 与外部存储：Bootloader/Application 独立工程和安全跳转稳定；Application 已具备 SPI NOR、24C02、统一存储接口、Flash 分区隔离、静态 RTOS 对象和自动硬件验收脚本。下一阶段进入 P5 USART1 IAP；镜像签名、双副本 Metadata 和随机断电回滚随后在 P6 实现。
+当前已完成 P1 基础 BSP 与外部存储以及 P5 USART1 文件传输闭环。系统具备 Serial Manager、平台无关 YMODEM-1K RX/TX、W25Q128 流式存储 Adapter、Bootloader/Application 命令控制台、系统运行模式和命令触发的 MCU YMODEM 会话任务。COM3 已完成 PC→Candidate→PC 的2500字节逐字节回环验证；下一步加入文件清单、整文件 CRC32、版本和签名策略。
 
 ## 当前版本
 
 | 项目 | 内容 |
 |---|---|
-| 版本 | `v0.4.0` |
+| 版本 | `v0.5.0` |
 | 日期 | `2026-08-11` |
-| 阶段 | P1：基础 BSP、外部存储与分区隔离 |
+| 阶段 | P5：USART1 YMODEM 文件传输闭环 |
 | 分支 | `main` |
 | 仓库 | [ZiulYanG/STM32F407_Codex_prj](https://github.com/ZiulYanG/STM32F407_Codex_prj) |
 
-本版本完成 SPI1/I2C1 BSP、NM25Q128EVB/W25Q128 与 24C02 驱动、Linux 风格统一存储接口、Candidate/Golden/Metadata/Driver Test 分区视图，以及 Debug/Release 自检门禁。Application 的任务和队列静态装配，运行时检查栈高水位和动态堆未使用状态；100 轮硬件在环存储循环全部通过。完整结论见 [P1 验收报告](docs/verification/10-p1-exit-storage-rtos-soak.md)。
+本版本在P1存储基线上完成USART1基础文件运输：双工程Console与分级日志、YMODEM-1K RX/TX、W25Q128流式Adapter、系统运行模式和静态Update会话任务。Application通过命令进入YMODEM独占模式，非必要心跳任务协作休眠；2500字节Candidate双向硬件回环和CAN取消恢复均已通过。完整结论见 [P5-4验收报告](docs/verification/13-p5-ymodem-session.md)。
 
 ## 编译与烧录 Bootloader
 
@@ -78,12 +78,14 @@ Version       : 0.4.0
 Vector table  : 0x08040000
 Storage partitions: READY
 RTOS health    : PASS
+Serial mode    : CONSOLE
 ```
 
 ## 版本记录
 
 | 版本 | 日期 | 实现功能 | 主要改动文件 | 验证 | 踩坑 |
 |---|---|---|---|---|---|
+| `v0.5.0` | 2026-08-11 | Serial Manager、双工程Console、分级日志、YMODEM RX/TX、W25Q128流式Adapter、命令触发会话与系统模式 | `Firmware/Common/`、两工程`app/`/日志/UART、`components/update/`、P5文档和脚本 | 主机测试、双工程Debug/Release、COM3 2500B Candidate双向回环、CAN取消与SWD模式验证 | StreamBuffer双Reader断言；会话栈最初只剩10 words；BOOT0偶发进入系统ROM |
 | `v0.4.0` | 2026-08-11 | SPI NOR/24C02、统一存储接口、Flash 分区隔离、静态 RTOS 对象、资源门禁与循环测试 | `Firmware/Application/bsp/`、`components/drivers/`、`components/storage/`、`app/`、`script/`、P1 文档 | 主机测试、Debug/Release Clean Build、DAPLink/COM3、累计100轮硬件在环存储循环通过 | 实测Flash为兼容料；CubeMX重置链接区/任务栈；末扇区边界测试同时触发越界与对齐；heap_4未初始化时余量显示0/0 |
 | `v0.3.0` | 2026-08-10 | 独立 APP、`0x08040000` 分区与 VTOR、APP 向量校验、安全跳转、无效 APP 驻留 | `Firmware/Application/`、`Firmware/Bootloader/components/boot/`、`boot_app.c`、`boot_log.*`、`freertos.c`、`.ioc`、阶段 2 文档 | 双工程 Clean Build、DAPLink 校验烧录、有效跳转、Sector 6 擦除拒跳、恢复 APP、SWD PC/VTOR/故障寄存器验证通过 | 512 B 默认任务栈被 `vsnprintf` 压穿并覆盖 Timer 栈；跳转交接窗口过早开中断；CH340 Code 10/掉线影响日志抓取 |
 | `v0.2.0` | 2026-08-08 | 168 MHz、TIM7 HAL 时基、FreeRTOS SysTick、静态 USART1 日志、启动信息 | `Firmware/Bootloader/Core/`、`app/`、`bsp/`、`components/logging/`、`docs/verification/` | Clean Build、DAPLink 烧录校验、SWD 寄存器回读、COM3 启动报文和 LED 验证通过 | `.ioc` 与生成源码漂移；TIM HAL 宏缺失导致链接失败；误将 COM11 当作板级日志串口 |

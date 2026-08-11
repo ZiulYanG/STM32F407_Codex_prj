@@ -109,9 +109,13 @@ def main() -> int:
             "EEPROM address: 0x50 (7-bit)",
             "EEPROM probe  : PASS",
             "RTOS objects   : STATIC",
+            "RTOS serial stack free :",
             "RTOS heap state        : UNUSED",
             "RTOS health    : PASS",
             "APP log drops  : 0",
+            "Serial mode    : CONSOLE",
+            "Serial RX/drop : 0/0 bytes",
+            "Serial HW overrun/error: 0/0",
         ]
         destructive_lines = (
             "SPI NOR test   :",

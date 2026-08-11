@@ -23,9 +23,13 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "app_log.h"
+#include "app_console.h"
 #include "app_main.h"
 #include "FreeRTOS.h"
+#include "serial_manager.h"
+#include "system_mode.h"
 #include "task.h"
+#include "update_session.h"
 
 /* USER CODE END Includes */
 
@@ -150,7 +154,19 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  if (!app_log_init())
+  if (!serial_manager_init())
+  {
+    Error_Handler();
+  }
+  if (!system_mode_init())
+  {
+    Error_Handler();
+  }
+  if (!app_console_init())
+  {
+    Error_Handler();
+  }
+  if (!update_session_init())
   {
     Error_Handler();
   }

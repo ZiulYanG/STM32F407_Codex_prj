@@ -8,6 +8,7 @@
 #include "bsp_spi1.h"
 #include "eeprom_24c02.h"
 #include "FreeRTOS.h"
+#include "serial_manager.h"
 #include "stm32f4xx_hal.h"
 #include "task.h"
 #include "spi_nor.h"
@@ -15,6 +16,8 @@
 #include "storage_eeprom_24c02.h"
 #include "storage_partition.h"
 #include "storage_spi_nor.h"
+#include "system_mode.h"
+#include "update_session.h"
 
 #include <string.h>
 
@@ -32,6 +35,8 @@
 #define SPI_NOR_PROGRAM_TIMEOUT_MS 500U
 #define SPI_NOR_ERASE_TIMEOUT_MS   3000U
 #define APP_RTOS_MIN_STACK_FREE_WORDS 64U
+#define APP_HEARTBEAT_MIN_MS 100U
+#define APP_HEARTBEAT_MAX_MS 10000U
 
 #if APP_ENABLE_SPI_NOR_SELF_TEST
 #define SPI_NOR_TEST_CROSS_PAGE_OFFSET 0x000000F0UL
@@ -91,6 +96,7 @@ static struct storage_device app_golden_storage;
 static struct storage_device app_metadata_a_storage;
 static struct storage_device app_metadata_b_storage;
 static struct storage_device app_driver_test_storage;
+static volatile uint32_t app_heartbeat_ms = 1000U;
 
 static bool app_partition_bind_and_open(struct storage_device *device,
                                         const char *name,
@@ -452,7 +458,8 @@ void app_main_init(void)
     bool flash_storage_ok = false;
     bool flash_partitions_ok = false;
     uint32_t default_stack_free_words;
-    uint32_t log_stack_free_words;
+    uint32_t serial_stack_free_words;
+    serial_manager_stats_t serial_stats = {0};
     size_t heap_free_bytes;
     size_t heap_min_free_bytes;
     bool heap_unused;
@@ -489,6 +496,11 @@ void app_main_init(void)
         if (flash_storage_ok)
         {
             flash_partitions_ok = app_flash_partitions_init();
+            if (flash_partitions_ok)
+            {
+                flash_partitions_ok =
+                    update_session_bind_candidate(&app_candidate_storage);
+            }
         }
 #if APP_ENABLE_SPI_NOR_SELF_TEST
         if (flash_partitions_ok)
@@ -616,7 +628,9 @@ void app_main_init(void)
 
     default_stack_free_words =
         (uint32_t)uxTaskGetStackHighWaterMark(NULL);
-    log_stack_free_words = app_log_get_stack_high_water_mark_words();
+    serial_stack_free_words =
+        serial_manager_get_stack_high_water_mark_words();
+    serial_manager_get_stats(&serial_stats);
     heap_free_bytes = xPortGetFreeHeapSize();
     heap_min_free_bytes = xPortGetMinimumEverFreeHeapSize();
     /* heap_4 reports 0/0 until its first allocation. P1 requires all
@@ -624,14 +638,14 @@ void app_main_init(void)
     heap_unused = (heap_free_bytes == 0U) && (heap_min_free_bytes == 0U);
     rtos_health_ok =
         (default_stack_free_words >= APP_RTOS_MIN_STACK_FREE_WORDS) &&
-        (log_stack_free_words >= APP_RTOS_MIN_STACK_FREE_WORDS) &&
+        (serial_stack_free_words >= APP_RTOS_MIN_STACK_FREE_WORDS) &&
         heap_unused;
 
     (void)app_log_printf("RTOS objects   : STATIC\r\n");
     (void)app_log_printf("RTOS default stack free: %lu words\r\n",
                          (unsigned long)default_stack_free_words);
-    (void)app_log_printf("RTOS log stack free    : %lu words\r\n",
-                         (unsigned long)log_stack_free_words);
+    (void)app_log_printf("RTOS serial stack free : %lu words\r\n",
+                         (unsigned long)serial_stack_free_words);
     (void)app_log_printf("RTOS heap free/min     : %lu/%lu bytes\r\n",
                          (unsigned long)heap_free_bytes,
                          (unsigned long)heap_min_free_bytes);
@@ -641,6 +655,13 @@ void app_main_init(void)
                          rtos_health_ok ? "PASS" : "FAIL");
     (void)app_log_printf("APP log drops  : %lu\r\n",
                          (unsigned long)app_log_get_dropped_count());
+    (void)app_log_printf("Serial mode    : CONSOLE\r\n");
+    (void)app_log_printf("Serial RX/drop : %lu/%lu bytes\r\n",
+                         (unsigned long)serial_stats.rx_bytes,
+                         (unsigned long)serial_stats.rx_dropped);
+    (void)app_log_printf("Serial HW overrun/error: %lu/%lu\r\n",
+                         (unsigned long)serial_stats.rx_hardware_overruns,
+                         (unsigned long)serial_stats.rx_hardware_errors);
     (void)app_log_printf("APP address   : 0x%08lX\r\n", (unsigned long)APPLICATION_FLASH_BASE);
     (void)app_log_printf("APP state     : DEVELOPMENT\r\n");
     (void)app_log_printf("================================\r\n");
@@ -650,16 +671,51 @@ void app_main_init(void)
 
 void app_main_task(void *argument)
 {
+    uint32_t period_ms;
+    uint32_t on_time_ms;
+
     (void)argument;
 
     for (;;)
     {
+        if (system_mode_get() != SYSTEM_MODE_NORMAL)
+        {
+            BSP_LED1_OFF();
+            BSP_LED2_OFF();
+            (void)system_mode_wait_normal(portMAX_DELAY);
+            continue;
+        }
+        period_ms = app_main_get_heartbeat_ms();
+        on_time_ms = (period_ms < 200U) ? (period_ms / 2U) : 100U;
         BSP_LED1_ON();
         BSP_LED2_ON();
-        vTaskDelay(pdMS_TO_TICKS(100U));
+        vTaskDelay(pdMS_TO_TICKS(on_time_ms));
 
         BSP_LED1_OFF();
         BSP_LED2_OFF();
-        vTaskDelay(pdMS_TO_TICKS(900U));
+        vTaskDelay(pdMS_TO_TICKS(period_ms - on_time_ms));
     }
+}
+
+bool app_main_set_heartbeat_ms(uint32_t period_ms)
+{
+    if ((period_ms < APP_HEARTBEAT_MIN_MS) ||
+        (period_ms > APP_HEARTBEAT_MAX_MS))
+    {
+        return false;
+    }
+    taskENTER_CRITICAL();
+    app_heartbeat_ms = period_ms;
+    taskEXIT_CRITICAL();
+    return true;
+}
+
+uint32_t app_main_get_heartbeat_ms(void)
+{
+    uint32_t period_ms;
+
+    taskENTER_CRITICAL();
+    period_ms = app_heartbeat_ms;
+    taskEXIT_CRITICAL();
+    return period_ms;
 }

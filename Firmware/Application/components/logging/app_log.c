@@ -2,33 +2,17 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "FreeRTOS.h"
-#include "bsp_uart1.h"
-#include "queue.h"
+#include "serial_manager.h"
 #include "task.h"
 
-#define APP_LOG_MESSAGE_SIZE       160U
-#define APP_LOG_QUEUE_DEPTH        24U
-#define APP_LOG_TASK_STACK_WORDS   512U
-#define APP_LOG_UART_TIMEOUT_MS    1000U
-#define APP_LOG_QUEUE_WAIT_MS      100U
-
-typedef struct
-{
-    uint16_t length;
-    char text[APP_LOG_MESSAGE_SIZE];
-} app_log_message_t;
-
-static StaticQueue_t log_queue_control;
-static uint8_t log_queue_storage[APP_LOG_QUEUE_DEPTH * sizeof(app_log_message_t)];
-static QueueHandle_t log_queue;
-
-static StaticTask_t log_task_control;
-static StackType_t log_task_stack[APP_LOG_TASK_STACK_WORDS];
-static TaskHandle_t log_task;
+#define APP_LOG_MESSAGE_SIZE  SERIAL_MANAGER_MAX_TX_SIZE
+#define APP_LOG_QUEUE_WAIT_MS 0U
 
 static uint32_t dropped_message_count;
+static volatile app_log_level_t minimum_level = APP_LOG_INFO;
 
 static void app_log_record_drop(void)
 {
@@ -37,93 +21,140 @@ static void app_log_record_drop(void)
     taskEXIT_CRITICAL();
 }
 
-static void app_log_task(void *argument)
+static bool app_log_vwrite(app_log_level_t level,
+                           const char *task_name,
+                           const char *format,
+                           va_list arguments)
 {
-    app_log_message_t message;
-
-    (void)argument;
-
-    for (;;)
-    {
-        if (xQueueReceive(log_queue, &message, portMAX_DELAY) == pdPASS)
-        {
-            if (bsp_uart1_write((const uint8_t *)message.text,
-                                message.length,
-                                APP_LOG_UART_TIMEOUT_MS) != 0)
-            {
-                app_log_record_drop();
-            }
-        }
-    }
-}
-
-bool app_log_init(void)
-{
-    if ((log_queue != NULL) || (log_task != NULL))
-    {
-        return false;
-    }
-
-    log_queue = xQueueCreateStatic(APP_LOG_QUEUE_DEPTH,
-                                   sizeof(app_log_message_t),
-                                   log_queue_storage,
-                                   &log_queue_control);
-    if (log_queue == NULL)
-    {
-        return false;
-    }
-
-    log_task = xTaskCreateStatic(app_log_task,
-                                 "app_log",
-                                 APP_LOG_TASK_STACK_WORDS,
-                                 NULL,
-                                 tskIDLE_PRIORITY + 1U,
-                                 log_task_stack,
-                                 &log_task_control);
-    return log_task != NULL;
-}
-
-bool app_log_printf(const char *format, ...)
-{
-    app_log_message_t message = {0};
-    TickType_t queue_wait = 0U;
-    va_list arguments;
+    char message[APP_LOG_MESSAGE_SIZE] = {0};
+    size_t message_length;
+    size_t prefix_length = 0U;
     int formatted_length;
 
-    if ((format == NULL) || (log_queue == NULL))
+    if ((format == NULL) || (level > APP_LOG_ERROR))
     {
         return false;
     }
+    if (level < app_log_get_level())
+    {
+        return true;
+    }
+    if (task_name != NULL)
+    {
+        formatted_length = snprintf(message,
+                                    sizeof(message),
+                                    "[%s][%s] ",
+                                    app_log_level_name(level),
+                                    task_name);
+        if ((formatted_length < 0) ||
+            ((size_t)formatted_length >= sizeof(message)))
+        {
+            app_log_record_drop();
+            return false;
+        }
+        prefix_length = (size_t)formatted_length;
+    }
 
-    va_start(arguments, format);
-    formatted_length = vsnprintf(message.text,
-                                 sizeof(message.text),
+    formatted_length = vsnprintf(&message[prefix_length],
+                                 sizeof(message) - prefix_length,
                                  format,
                                  arguments);
-    va_end(arguments);
-
     if (formatted_length < 0)
     {
         app_log_record_drop();
         return false;
     }
 
-    message.length = (formatted_length >= (int)sizeof(message.text))
-                         ? (uint16_t)(sizeof(message.text) - 1U)
-                         : (uint16_t)formatted_length;
-
-    if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING)
-    {
-        queue_wait = pdMS_TO_TICKS(APP_LOG_QUEUE_WAIT_MS);
-    }
-
-    if (xQueueSend(log_queue, &message, queue_wait) != pdPASS)
+    message_length = ((size_t)formatted_length >=
+                      (sizeof(message) - prefix_length))
+                         ? sizeof(message) - 1U
+                         : prefix_length + (size_t)formatted_length;
+    if (serial_manager_write(SERIAL_TX_LOG,
+                             (const uint8_t *)message,
+                             message_length,
+                             APP_LOG_QUEUE_WAIT_MS) != SERIAL_STATUS_OK)
     {
         app_log_record_drop();
         return false;
     }
 
     return true;
+}
+
+bool app_log_printf(const char *format, ...)
+{
+    va_list arguments;
+    bool result;
+
+    va_start(arguments, format);
+    result = app_log_vwrite(APP_LOG_INFO, NULL, format, arguments);
+    va_end(arguments);
+    return result;
+}
+
+bool app_log_write(app_log_level_t level,
+                   const char *task_name,
+                   const char *format,
+                   ...)
+{
+    va_list arguments;
+    bool result;
+
+    va_start(arguments, format);
+    result = app_log_vwrite(level, task_name, format, arguments);
+    va_end(arguments);
+    return result;
+}
+
+bool app_log_set_level(app_log_level_t level)
+{
+    if (level > APP_LOG_ERROR)
+    {
+        return false;
+    }
+    taskENTER_CRITICAL();
+    minimum_level = level;
+    taskEXIT_CRITICAL();
+    return true;
+}
+
+app_log_level_t app_log_get_level(void)
+{
+    app_log_level_t level;
+
+    taskENTER_CRITICAL();
+    level = minimum_level;
+    taskEXIT_CRITICAL();
+    return level;
+}
+
+const char *app_log_level_name(app_log_level_t level)
+{
+    static const char *const names[] = {"DEBUG", "INFO", "WARN", "ERROR"};
+
+    return (level <= APP_LOG_ERROR) ? names[level] : "UNKNOWN";
+}
+
+bool app_log_parse_level(const char *text, app_log_level_t *level)
+{
+    static const char *const names[] = {"debug", "info", "warn", "error"};
+    app_log_level_t candidate;
+
+    if ((text == NULL) || (level == NULL))
+    {
+        return false;
+    }
+    for (candidate = APP_LOG_DEBUG;
+         candidate <= APP_LOG_ERROR;
+         candidate = (app_log_level_t)(candidate + 1))
+    {
+        if (strcmp(text, names[candidate]) == 0)
+        {
+            *level = candidate;
+            return true;
+        }
+    }
+    return false;
 }
 
 uint32_t app_log_get_dropped_count(void)
@@ -135,14 +166,4 @@ uint32_t app_log_get_dropped_count(void)
     taskEXIT_CRITICAL();
 
     return count;
-}
-
-uint32_t app_log_get_stack_high_water_mark_words(void)
-{
-    if (log_task == NULL)
-    {
-        return 0U;
-    }
-
-    return (uint32_t)uxTaskGetStackHighWaterMark(log_task);
 }

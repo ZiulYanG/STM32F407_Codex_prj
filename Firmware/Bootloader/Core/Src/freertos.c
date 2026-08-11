@@ -27,7 +27,9 @@
 /* USER CODE BEGIN Includes */
 #include "boot_app.h"
 #include "boot_log.h"
+#include "boot_console.h"
 #include "led_task.h"
+#include "serial_manager.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -98,7 +100,11 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  if (!boot_log_init())
+  if (!serial_manager_init())
+  {
+    Error_Handler();
+  }
+  if (!boot_console_init())
   {
     Error_Handler();
   }
@@ -124,11 +130,10 @@ void StartDefaultTask(void *argument)
   /* USER CODE BEGIN StartDefaultTask */
   (void)argument;
 
-  boot_app_process();
-
   /* Infinite loop */
   for(;;)
   {
+    boot_app_process();
     osDelay(1);
   }
   /* USER CODE END StartDefaultTask */

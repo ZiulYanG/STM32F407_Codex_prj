@@ -55,6 +55,8 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     app/app_main.c
+    app/app_console.c
+    app/system_mode.c
     bsp/bsp_board.c
     bsp/bsp_i2c1.c
     bsp/bsp_spi1.c
@@ -65,7 +67,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     components/storage/storage.c
     components/storage/storage_eeprom_24c02.c
     components/storage/storage_partition.c
+    components/update/ymodem_storage.c
+    components/update/update_session.c
     components/storage/storage_spi_nor.c
+    ../Common/serial/serial_manager.c
+    ../Common/console/command_console.c
+    ../Common/ymodem/ymodem.c
 )
 
 # Add include paths
@@ -75,6 +82,10 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     components/drivers
     components/logging
     components/storage
+    components/update
+    ../Common/ymodem
+    ../Common/serial
+    ../Common/console
 )
 
 # Add project symbols (macros)

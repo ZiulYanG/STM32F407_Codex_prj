@@ -2,6 +2,41 @@
 
 本文件记录每次提交对应的版本、日期、功能、改动文件、验证结果和踩坑。最新记录位于最上方。
 
+## [v0.5.0] - 2026-08-11
+
+### P5-4 命令触发的 YMODEM 文件传输会话
+
+- 新增静态 `update_session` 任务和请求队列，将 Candidate RX/TX、串口模式切换、异常恢复隐藏在统一 Interface 后；
+- 新增 `system_mode` 静态 EventGroup，传输时进入 FILE_RECEIVE/FILE_SEND，心跳任务协作休眠，关键串口链路继续运行；
+- Application Console 新增 `ymodem rx candidate`、`ymodem tx candidate [size]` 和 `ymodem status`；
+- 新增 Python COM3 验收脚本，将2500字节模式数据写入W25Q128 Candidate，再由设备发送回PC并逐字节比较；
+- 修复 Console/YMODEM 切换瞬间两个任务阻塞读取同一 StreamBuffer 导致 FreeRTOS 单Reader断言的问题；Serial Manager改用带模式复核的非阻塞短轮询；
+- 实测双CAN取消后恢复Console、SYSTEM_MODE_NORMAL和心跳，串口drop/error均为0；
+- 会话任务初始仅剩10 words栈，提升至1024 words后完整RX/TX余量为266 words。
+
+### P5-2/P5-3 YMODEM、存储适配与串口控制台
+
+- 新增无 HAL/RTOS/存储依赖的 YMODEM-1K RX/TX 状态机，覆盖重传、取消、超时和 EOT 收尾；
+- 新增 File Sink/Source 接口及 Application 存储适配器，按 4 KB 边界按需擦除，1 KB 数据由 SPI NOR 层拆成 256 B Page Program；
+- 新增共享命令解析器，以及 Bootloader/Application 独立控制台任务；
+- 命令应答走高优先级队列，普通任务日志走普通队列，并支持运行时日志等级；
+- Bootloader 新增 3 s 非阻塞命令窗口、驻留/跳转、查询、参数设置和复位命令；
+- Application 新增状态查询、心跳周期设置、日志等级和复位命令；
+- YMODEM、Console、存储 Adapter 主机测试和双工程 Debug/Release 构建通过；
+- 两套 Console 均通过 COM3 实测；YMODEM MCU 会话任务和 Python 端到端传输已在P5-4接入；
+- DAPLink 复位偶发从 `0x1FFF3DA0` 系统 Boot ROM 启动，需检查 BOOT0 跳线/下拉。
+
+### P5-1 USART1 Serial Manager
+
+- 新增 Serial Manager 静态任务、普通/高优先级 TX 队列和 RX StreamBuffer；
+- USART1 BSP 新增中断接收及 2048 字节 SPSC 环形缓冲；
+- `app_log` 改为 Serial Manager 的日志生产者，不再创建任务或直接调用 UART BSP；
+- 新增 Console/YMODEM/Modbus 模式入口，非 Console 模式自动拒绝普通日志；
+- CubeMX `.ioc` 与生成代码同步启用 USART1 IRQ，优先级为 5；
+- 构建门禁检查全部串口 RTOS 对象静态分配，并检查 USART1 写所有权；
+- Debug/Release Clean Build、Release DAPLink 烧录、COM3 TX 和 SWD RX 统计验证通过；
+- 256 字节 RX 实测无 StreamBuffer 丢弃、硬件溢出或 UART 错误；Release 串口任务剩余栈 422 words，heap 保持 UNUSED。
+
 ## [v0.4.0] - 2026-08-11
 
 ### 版本目标

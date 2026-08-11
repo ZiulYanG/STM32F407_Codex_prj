@@ -1,7 +1,7 @@
 # STM32F407 项目新对话交接摘要
 
 更新时间：2026-08-11
-当前版本：`v0.4.0`
+当前版本：`v0.5.0`
 当前分支：`main`
 远端仓库：<https://github.com/ZiulYanG/STM32F407_Codex_prj>
 
@@ -12,15 +12,15 @@
 | 项目 | 当前状态 |
 |---|---|
 | 最近同步日期 | 2026-08-11 |
-| 基线提交 | `v0.4.0` 标签（本次发布提交） |
-| 已发布标签 | `v0.4.0` |
-| 已完成阶段 | P0：双工程与安全跳转；P1：基础BSP、双外部存储、统一接口、分区隔离与资源健康验收 |
-| 当前阶段 | P5准备：USART1基础IAP |
-| 最近完成 | P1累计100轮硬件在环存储循环、静态RTOS对象和栈/堆健康门禁全部PASS |
-| 当前任务 | 冻结并发布v0.4.0 P1基线，随后进入P5 |
-| 下一项单一交付 | P5-1确定USART1日志/升级帧所有权与协议帧格式，实现无HAL依赖的升级会话核心主机测试 |
-| 硬件验证状态 | Debug双存储/分区/RTOS health全部PASS并累计100轮循环；Release自检DISABLED、RTOS health PASS；当前板上运行Bootloader/Application v0.4.0 Release镜像 |
-| 阻塞项 | 无Application链接阻塞；Bootloader自身的PB14默认低和SPI1 42 MHz配置仍待后续整改 |
+| 基线提交 | `v0.5.0`（以该标签指向的Git提交为准） |
+| 已发布标签 | `v0.5.0` |
+| 已完成阶段 | P0：双工程与安全跳转；P1：基础BSP与存储；P5基础USART1 YMODEM文件运输闭环 |
+| 当前阶段 | P5：USART1基础IAP |
+| 最近完成 | P5-4命令触发YMODEM会话、运行模式协作、Candidate 2500B双向硬件回环和CAN取消恢复 |
+| 当前任务 | v0.5.0基础文件运输闭环已验证并完成版本归档 |
+| 下一项单一交付 | P5-5定义文件Manifest并实现整文件CRC32/文件类型/长度校验，成功后才产生Candidate READY状态 |
+| 硬件验证状态 | COM3 PC→Candidate→PC 2500B逐字节PASS；SYSTEM/SERIAL模式1、LED关闭经SWD确认；取消后NORMAL；drop/error=0，Console/Serial/Update栈176/416/266 words |
+| 阻塞项 | DAPLink/软件复位后曾进入`0x1FFF3DA0`系统Boot ROM，需检查BOOT0跳线/下拉；Bootloader自身PB14默认低和SPI1 42 MHz仍待整改 |
 
 ### 进度同步要求
 
@@ -149,6 +149,9 @@ python Firmware/Bootloader/script/flash.py --adapter-speed 100 --dap-serial B189
 9. SPI NOR开发擦写只能使用`0x00FFF000`测试扇区；自测试结束必须再次擦除。不得用Candidate、Golden、Metadata、Event Log或Crash Dump区域做驱动测试。
 10. APP启动日志曾在第24条后消失；根因是`app_main_init()`在调度器启动前一次性填满24深度队列。临时扩到32后原脚本立即转绿，确认不是Flash卡死。正式修复为调度器启动后在默认任务执行初始化、队列满时最多等待100 ms，并将默认任务栈从512 B同步提升到2 KB；回归日志`APP log drops : 0`。
 11. 破坏性硬件自测试不能只依靠运行时`if`或人工约定关闭；当前由构建类型定义宏，并由ELF级策略检查阻止Release包含自测试入口。
+12. 2026-08-11 DAPLink 后续复位偶发使 PC 位于`0x1FFF3DA0`，即STM32系统Boot ROM；这不是Console代码地址。应检查BOOT0跳线和下拉是否稳定。测试中曾临时整片擦除内部Flash，随后Bootloader/Application Release均已重新烧录并Verify；外部Flash未改动。
+13. Console到YMODEM切换初版触发FreeRTOS StreamBuffer单Reader断言：Console仍阻塞读取时Update任务成为第二Reader。Serial Manager现使用非阻塞短轮询并逐轮复核模式，旧Reader先退出后新Reader接管；2500B硬件回环通过。
+14. Update任务768 words栈在完整会话后只剩10 words；已提升至1024 words，最终余量266 words。
 
 ## 8. 下一阶段建议
 
@@ -167,8 +170,15 @@ P0 与 P1 已完成。下一对话进入 P5 USART1 IAP，并仍采用“一步�
 11. 已完成轻量存储分区视图及Candidate、Golden、Metadata A/B、Driver Test静态隔离；
 12. 已完成任务栈高水位、heap未使用监测、跨复位稳定态和长时间循环测试；
 13. 已完成静态RTOS对象、栈高水位/heap未使用门禁和累计100轮存储循环；P1验收通过；
-14. P5第一步先解决USART1日志与二进制升级协议的唯一所有权和帧复用，再实现升级会话核心；
-15. 写入中随机断电、双副本Metadata、签名和回滚仍属于P6，不得在P5基础传输阶段提前宣称完成。
+14. 已完成P5-1 USART1 Serial Manager：只有该静态任务可调用UART BSP写接口，日志走24深度普通队列，协议控制字节预留8深度高优先级队列；USART1 IRQ优先级5，BSP使用2048字节SPSC环形缓冲，Manager使用2048字节RX StreamBuffer；
+15. Release实测串口任务剩余422 words，heap保持UNUSED；COM3注入256字节后SWD读取`rx_bytes=256`、`rx_dropped=0`、硬件overrun/error=0；
+16. 已完成无HAL/RTOS/存储依赖的YMODEM-1K RX/TX状态机及主机测试，覆盖正常传输、CRC错误、ACK丢失、取消和EOT；
+17. 已完成`ymodem_storage` Source/Sink Adapter：每进入新4KB区域按需擦除，YMODEM的1KB写由SPI NOR驱动拆成4次256B Page Program，不使用额外4KB缓存；
+18. 已完成共享命令解析器和Boot/App独立Console：协议应答走高优先级队列，任务日志走普通队列，支持查询、运行时参数、分级日志、复位以及Boot驻留/跳转；两套Console均通过COM3实测；
+19. 已完成Application静态YMODEM会话任务、Candidate绑定、Console/YMODEM模式切换和系统模式协作；
+20. COM3已将2500B模式数据接收到Candidate再发送回PC并逐字节PASS；双CAN可取消并恢复Console/NORMAL；
+21. 当前只能称为文件运输闭环，不能称为可信升级闭环；下一步先实现Manifest和整文件CRC32/类型/长度校验；
+22. 写入中随机断电、双副本Metadata、版本签名和回滚仍属于后续P5/P6，不得提前宣称完成。
 
 不要在这一阶段同时展开 Modbus、USB 和 IAP，以免硬件驱动问题与协议问题互相干扰。
 
@@ -177,7 +187,7 @@ P0 与 P1 已完成。下一对话进入 P5 USART1 IAP，并仍采用“一步�
 新建一个以当前仓库为工作区的 Codex 对话，然后发送：
 
 ```text
-请先完整阅读根目录 PROJECT_HANDOFF.md，并遵守根目录 AGENTS.md。P0/P1 已以 v0.4.0 完成，我们进入 P5 USART1 基础 IAP。第一步只设计并验证 USART1 日志/升级帧的唯一所有权、协议帧格式和无 HAL 依赖的升级会话核心，不同时展开签名、回滚、USB 或 Modbus。延续现有规则：每一步先主机测试和构建，再烧录，再用 COM3 或 SWD 验证；验证通过后同步更新 PROJECT_HANDOFF.md。
+请先完整阅读根目录 PROJECT_HANDOFF.md，并遵守根目录 AGENTS.md。v0.5.0已完成USART1命令触发的YMODEM Candidate双向文件运输闭环。下一步只定义文件Manifest并实现整文件CRC32、文件类型和长度校验，只有验证通过才能写Candidate READY；暂不同时展开签名、回滚、USB或Modbus。每一步先主机测试和构建，再烧录，再用COM3或SWD验证。
 ```
 
 ## 10. 关键文档
@@ -186,6 +196,7 @@ P0 与 P1 已完成。下一对话进入 P5 USART1 IAP，并仍采用“一步�
 - `CHANGELOG.md`
 - `docs/architecture/01-system-architecture.md`
 - `docs/architecture/02-linux-inspired-storage-driver-model.md`
+- `docs/architecture/03-serial-manager-and-protocol-seam.md`
 - `docs/roadmap/01-implementation-roadmap.md`
 - `docs/hardware/01-io-allocation.md`
 - `docs/hardware/02-cubemx-baseline.md`
@@ -201,4 +212,8 @@ P0 与 P1 已完成。下一对话进入 P5 USART1 IAP，并仍采用“一步�
 - `docs/verification/08-unified-storage-interface.md`
 - `docs/verification/09-storage-partitions.md`
 - `docs/verification/10-p1-exit-storage-rtos-soak.md`
+- `docs/verification/11-p5-serial-manager.md`
+- `docs/architecture/04-ymodem-and-console.md`
+- `docs/verification/12-p5-ymodem-console.md`
+- `docs/verification/13-p5-ymodem-session.md`
 - `docs/debug/01-openocd-pc-lr-fault-localization.md`

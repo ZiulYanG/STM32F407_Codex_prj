@@ -45,11 +45,14 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     app/boot_app.c
+    app/boot_console.c
     bsp/bsp_board.c
     bsp/bsp_uart1.c
     app/led_task.c
     components/boot/app_launcher.c
     components/logging/boot_log.c
+    ../Common/serial/serial_manager.c
+    ../Common/console/command_console.c
     Core/Src/stm32f4xx_hal_timebase_tim.c
 )
 
@@ -60,6 +63,8 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     components
     components/boot
     components/logging
+    ../Common/serial
+    ../Common/console
 )
 
 # Add project symbols (macros)
